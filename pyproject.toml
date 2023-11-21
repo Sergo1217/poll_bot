@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "tbot"
+version = "0.1.0"
+description = ""
+authors = ["Sergo1217"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+python-telegram-bot = {extras = ["job-queue"], version = "^20.6"}
+sqlalchemy = "^2.0.23"
+
+[tool.ruff]
+select = ["ALL"]
+ignore = ["RUF001", "D", "ANN", "T", "E501", "N", 'A003', 'ARG001', 'ERA001', 'INP001', "B008", 'W292', 'TCH002', 'BLE001', 'TCH001']
+fixable = ["ALL"]
+target-version = "py311"
+
+[tool.black]
+target-version = ['py311']
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
