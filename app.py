@@ -1,7 +1,7 @@
-import logging
 from datetime import datetime
 
-from telegram import Bot, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from loguru import logger
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -12,26 +12,18 @@ from telegram.ext import (
     filters,
 )
 
+from config import TOKEN
 from model import Poll, User
-from repository import PollRepository, UserRepository
-
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logger = logging.getLogger(__name__)
+from repository import poll_repo, user_repo
 
 MENU, CREATE_POLL, POLL_DOW, POLL_TIME, POLL_DURATION, LIST_POLL, DELETE_POLL = range(7)
-TOKEN = "Вставьте ваш токен"
-poll_repo, user_repo = PollRepository(), UserRepository()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Начало"""
+    """Начало. Точка входа в контекст"""
     user = update.message.from_user
     reply_keyboard = [["Создать опрос", "Удалить опрос", "Cтатистика"]]
-    logger.info("Пользователь %s запустил бота.", user.first_name)
+    logger.info(f"Пользователь {user.name} запустил бота.")
     await update.message.reply_text(
         "Привет. Этот бот поможет тебе создавать регулярные опросы",
     )
@@ -50,7 +42,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def new_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Создание опроса"""
     user = update.message.from_user
-    logger.info("Пользователь %s создает опрос.", user.first_name)
+    logger.info(f"Пользователь {user.name} создает опрос.")
     await update.message.reply_text(
         "Пожалуйста отправьте опрос который хотите сделать периодическим",
         reply_markup=ReplyKeyboardRemove(),
@@ -66,12 +58,7 @@ async def create_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         [option["text"] for option in update.message.poll.options],
     )
     logger.info(
-        """Пользователь %s отправил опрос.
-           Вопрос: %s,
-           Доступные опции: %s""",
-        user.first_name,
-        update.message.poll.question,
-        [option["text"] for option in update.message.poll.options],
+        f"Пользователь {user.name} отправил опрос.\n Вопрос: {update.message.poll.question},\n Доступные опции: {context.user_data['options']}",
     )
     await update.message.reply_text("Укажите дни недели публикации опроса")
     await update.message.reply_text("Например: ПН,СР,ПТ")
@@ -82,37 +69,38 @@ async def poll_dow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение дней недели опроса"""
     user = update.message.from_user
     context.user_data["dows"] = update.message.text
-    logger.info("Пользователь %s установил день недели.", user.first_name)
+    logger.info(f"Пользователь {user.name} установил день недели.")
     await update.message.reply_text("Укажите время публикации опроса")
     await update.message.reply_text("Например: 12:30")
     return POLL_TIME
 
 
 async def poll_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Получение времени опроса"""
+    """Получение времени публикации опроса в формате HH:MM"""
     user = update.message.from_user
     context.user_data["start_time"] = update.message.text
-    logger.info("Пользователь %s установил время начала опроса.", user.first_name)
+    logger.info(f"Пользователь {user.name} установил время начала опроса.")
     await update.message.reply_text("Укажите время закрытия опроса")
     await update.message.reply_text("Например: 15:00")
     return POLL_DURATION
 
 
 async def poll_duration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Получение продолжительности опроса"""
+    """Получение времени окончания опроса в формате HH:MM"""
     user = update.message.from_user
     context.user_data["end_time"] = update.message.text
     context.user_data["chat_id"] = update.message.chat_id
-    logger.info("Пользователь %s установил время закрытия опроса.", user.first_name)
-    logger.info("Создан опрос %s", context.user_data)
+    logger.info(f"Пользователь {user.name} установил время закрытия опроса.")
     poll_repo.add(Poll(**context.user_data))
+    logger.info(f"Создан опрос {context.user_data}")
     await update.message.reply_text("Опрос успешно создан")
     return ConversationHandler.END
 
 
 async def list_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Удаление опроса"""
-    logger.info("Этот метод еще не готов")
+    """Вывод списка опросов"""
+    user = update.message.from_user
+    logger.info(f"Пользователь {user.name} открыл список опросов.")
     polls = list(poll_repo.get(update.message.chat_id))
     if polls:
         reply_keyboard = [[str(poll.id) for poll in polls]]
@@ -135,8 +123,9 @@ async def list_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def delete_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Удаление опроса"""
-    logger.info("Этот метод еще не готов")
+    user = update.message.from_user
     poll_repo.delete(int(update.message.text))
+    logger.info(f"Пользователь {user.name} удалил опрос.")
     await update.message.reply_text(
         "Опрос удален",
         reply_markup=ReplyKeyboardRemove(),
@@ -147,7 +136,7 @@ async def delete_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Выход из контекста"""
     user = update.message.from_user
-    logger.info("Пользователь %s закрыл контекст.", user.first_name)
+    logger.info(f"Пользователь {user.name} закрыл контекст.")
     await update.message.reply_text(
         "Контекст закрыт.",
         reply_markup=ReplyKeyboardRemove(),
@@ -165,9 +154,9 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     rez["poll_question"] = poll[0].question
     options = poll[0].options.split(",")
     rez["user_options"] = ",".join(
-        [options[option] for option in update.poll_answer.option_ids]
+        [options[option] for option in update.poll_answer.option_ids],
     )
-    logger.info("Перехвачен ответ %s", rez)
+    logger.info(f"Перехвачен ответ на опрос {rez}")
     user_repo.add(User(**rez))
 
 
@@ -185,17 +174,20 @@ async def poll_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         poll.poll_id = msg.poll.id
         poll.message_id = msg.message_id
         poll_repo.update(poll)
+        logger.info(f"Опроса {msg} опубликован")
     for poll in poll_repo.get(end_time=cur_time, dow=dow):
         end_poll = await context.bot.stopPoll(
-            chat_id=poll.chat_id, message_id=poll.message_id
+            chat_id=poll.chat_id, message_id=poll.message_id,
         )
-        logger.info("Опроса %s завершен", end_poll)
+        logger.info(f"Опроса {end_poll} завершен")
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Статистика опросов"""
+    user = update.message.from_user
+    logger.info(f"Пользователь {user.name} запросил статистику.")
     users = user_repo.get(
-        chat_id=update.message.chat_id, user_id=update.message.from_user.id
+        chat_id=update.message.chat_id, user_id=update.message.from_user.id,
     )
     if users:
         for user in users:
@@ -241,6 +233,7 @@ def main() -> None:
     application.add_handler(conv_handler)
     job_queue = application.job_queue
     job_queue.run_repeating(poll_job, interval=60, first=3)
+    logger.info("Бот запущен")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

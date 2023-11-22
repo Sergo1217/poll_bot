@@ -1,12 +1,11 @@
 from sqlalchemy import (
     Column,
-    ForeignKey,
     Integer,
     String,
     create_engine,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = "sqlite:///./db.sqlite"
 engine = create_engine(DATABASE_URL)

@@ -55,3 +55,5 @@ class UserRepository:
         else:
             self.session.add(user_data)
         self.session.commit()
+
+poll_repo, user_repo = PollRepository(), UserRepository()
